@@ -1,6 +1,7 @@
 {
-    "username": "<enter username>",
-    "password": "<enter password",
-    "platformUrl": "changemyworldnow.intelligencebank.com",
+    "spaceId": "<enter space id>",
+    "contentToken": "<enter content token>",
+    "previewToken": "<enter preview token>",
     "host": "<url that will be added to media info>"
 }
+
