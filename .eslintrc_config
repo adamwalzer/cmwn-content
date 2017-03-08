@@ -1,0 +1,9 @@
+{
+    "env": {
+        "node": true
+    },
+    "globals": {
+        "process": false,
+        "require": false
+    }
+}
