@@ -1,6 +1,7 @@
 var Log = require('log');
 var rollbar = require('rollbar');
 var express = require('express');
+var request = require('request');
 var app = express();
 var crypto = require('crypto');
 var AWS = require('aws-sdk');
@@ -8,7 +9,6 @@ var timeout = require('connect-timeout');
 var cliArgs = require('optimist').argv;
 var log = new Log((cliArgs.d || cliArgs.debug) ? 'debug' : 'info');
 
-var Util = require('./util.js');
 var service = require('./contentful_service.js');
 var rollbarKeys = require('../conf/rollbar.json');
 
@@ -57,8 +57,8 @@ app.get('/c/*', function (req, res) {
         params: {Bucket: s3Bucket}
     });
 
-    var assetId = req.params[0] || '0';
-    log.debug('Asset Id: ' + assetId);
+    var contentId = req.params[0] || '0';
+    log.debug('Asset Id: ' + contentId);
 
     var r;
     var rej;
@@ -76,20 +76,18 @@ app.get('/c/*', function (req, res) {
         }
         try {
             res.set('cache-control', 'public, max-age=604800');
-            res.set('etag', crypto.createHash('md5').update(data).digest('hex'));
+            res.set('etag', crypto.createHash('md5').update(data.sys.id).digest('hex'));
         } catch(error) {
             log.error('Some content headers could not be set. Attempting to return asset. Reason: ' + error);
         }
-
-        res.send(data);
 
         if (!s3StoreFound) {
             //don't waste the user's time storing before the asset has been returned
             setTimeout(function () {
                 //store file result in s3
                 s3.upload({
-                    Key: req.get('host') + '/' + assetId + '.json',
-                    Body: data,
+                    Key: req.get('host') + '/' + contentId + '.json',
+                    Body: JSON.stringify(data),
                     ACL: 'public-read'
                 }, function (err_) {
                     if (err_) {
@@ -99,6 +97,8 @@ app.get('/c/*', function (req, res) {
                 });
             }, 500);
         }
+
+        res.send(data);
     };
 
 
@@ -106,7 +106,7 @@ app.get('/c/*', function (req, res) {
     s3.listObjects({Prefix: req.get('host')}, function (err_, data_) { //remove /f/
         var now = new Date(Date.now());
         var expires = now;
-        var searchKey = req.get('host') + '/' + Util.transformQueriedToS3ParamEncoded(req.path.slice(3), req.query);
+        var searchKey = req.get('host') + '/' + contentId + '.json';
         now.setHours(now.getHours());
         data_.Contents.map(function (content) {
             if (content.Key === searchKey) {
@@ -121,10 +121,13 @@ app.get('/c/*', function (req, res) {
         //we want to fall back to the s3 version even if it is expired
         log.info('content found in s3?: ' + s3StoreFound);
         if (s3StoreFound && req.query.bust == null && cliArgs.n == null && cliArgs.nocache == null && now < expires) {
+            request.get('https://s3.amazonaws.com/' + s3Bucket + '/' + key).then(r).catch(err => {
+                log.error('could not retrieve content from s3: ' + err);
+            });
             r({url: 'https://s3.amazonaws.com/' + s3Bucket + '/' + key });
         } else {
             log.info('skipping s3');
-            service.getAssetById(assetId, r, function () {
+            service.getAssetById(contentId, r, function () {
                 if (s3StoreFound) {
                     log.info('image unavailable from service, falling back to s3 store copy');
                     r({url: 'https://s3.amazonaws.com/' + s3Bucket + '/' + key });
