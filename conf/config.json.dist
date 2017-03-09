@@ -1,0 +1,15 @@
+
+{
+    "logLevel": "debug",
+    "env": "local",
+    "hostname": "https://media.changemyworldnow.com"
+    "aws_region": "us-east-1",
+    "aws_accessKeyId": "<your access key>",
+    "aws_secretAccessKey": "<your secret key>",
+    "rollbar_token": "<Rollbar Post-server item access token here>",
+    "contentful_spaceId": "<enter space id>",
+    "contentful_contentToken": "<enter content token>",
+    "contentful_previewToken": "<enter preview token>",
+    "host": "<url that will be added to media info>"
+}
+

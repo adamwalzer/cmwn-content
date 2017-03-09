@@ -1,7 +1,8 @@
+var _ = require('lodash');
 var Log = require('log');
 var rollbar = require('rollbar');
 var express = require('express');
-var request = require('request');
+var request = require('request-promise');
 var app = express();
 var crypto = require('crypto');
 var AWS = require('aws-sdk');
@@ -10,9 +11,11 @@ var cliArgs = require('optimist').argv;
 var log = new Log((cliArgs.d || cliArgs.debug) ? 'debug' : 'info');
 
 var service = require('./contentful_service.js');
-var rollbarKeys = require('../conf/rollbar.json');
+var config = require('../conf/config.json');
 
-AWS.config.loadFromPath('./conf/aws.json');
+AWS.config.loadFromPath('./conf/config.json');
+//note that region, accessKeyId, and secretAccessKey must have these names
+//and are AWS keys
 var rollbarOpts = {
     environment: 'Media'
 };
@@ -75,6 +78,9 @@ app.get('/c/*', function (req, res) {
             res.status(data.status || 500).send({error: data.err});
         }
         try {
+            if (_.isString(data)) {
+                data = JSON.parse(data);
+            }
             res.set('cache-control', 'public, max-age=604800');
             res.set('etag', crypto.createHash('md5').update(data.sys.id).digest('hex'));
         } catch(error) {
@@ -119,18 +125,23 @@ app.get('/c/*', function (req, res) {
         //until we have the update service, these need to expire after a day
         //however, we dont want to delete them and make them unavailable, so
         //we want to fall back to the s3 version even if it is expired
+        // MPR 3/9/16: disabling expiration for the time being, no need for it (readd with `&& now < expires` below)
         log.info('content found in s3?: ' + s3StoreFound);
-        if (s3StoreFound && req.query.bust == null && cliArgs.n == null && cliArgs.nocache == null && now < expires) {
-            request.get('https://s3.amazonaws.com/' + s3Bucket + '/' + key).then(r).catch(err => {
-                log.error('could not retrieve content from s3: ' + err);
+        if (s3StoreFound && req.query.bust == null && cliArgs.n == null && cliArgs.nocache == null) {
+            request.get('https://s3.amazonaws.com/' + s3Bucket + '/' + key).then(r).catch(s3Err => {
+                service.getAssetById(contentId, r, function (serviceErr) {
+                    log.error('failed to retrieve content from any source. s3 failure: ' + s3Err + ', contentful failure: ' + serviceErr);
+                    rej.apply(this, arguments);
+                });
             });
-            r({url: 'https://s3.amazonaws.com/' + s3Bucket + '/' + key });
         } else {
             log.info('skipping s3');
             service.getAssetById(contentId, r, function () {
                 if (s3StoreFound) {
                     log.info('image unavailable from service, falling back to s3 store copy');
-                    r({url: 'https://s3.amazonaws.com/' + s3Bucket + '/' + key });
+                    request.get('https://s3.amazonaws.com/' + s3Bucket + '/' + key).then(r).catch(err => {
+                        log.error('could not retrieve content from s3: ' + err);
+                    });
                 } else {
                     rej.apply(this, arguments);
                 }
@@ -153,13 +164,13 @@ app.get('/p', function (req, res) {
     res.status(200).send('LGTM');
 });
 
-rollbar.init(rollbarKeys.token, rollbarOpts);
-rollbar.handleUncaughtExceptions(rollbarKeys.token, rollbarOpts);
-rollbar.handleUnhandledRejections(rollbarKeys.token, rollbarOpts);
-app.use(rollbar.errorHandler(rollbarKeys.token, rollbarOpts));
+rollbar.init(config.rollbar_token, rollbarOpts);
+rollbar.handleUncaughtExceptions(config.rollbar_token, rollbarOpts);
+rollbar.handleUnhandledRejections(config.rollbar_token, rollbarOpts);
+app.use(rollbar.errorHandler(config.rollbar_token, rollbarOpts));
 
 app.listen(3000, function () {
     //service.init(storage);
-    service.init();
+    service.init(config);
     log.debug('App listening on port 3000!');
 });
