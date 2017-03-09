@@ -1,6 +1,6 @@
 var _ = require('lodash');
 
-const paramBlacklist = [
+const PARAM_BLACKLIST = [
     'bust'
 ];
 var Utils = {
@@ -9,7 +9,7 @@ var Utils = {
         var extension = pathArr.pop();
 
         _.each(query, (v, k) => {
-            if (!~paramBlacklist.indexOf(k.toLowerCase())) {
+            if (!~PARAM_BLACKLIST.indexOf(k.toLowerCase())) {
                 pathArr.push('_P_' + k + '__' + v);
             }
         });

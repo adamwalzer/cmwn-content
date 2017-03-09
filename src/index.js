@@ -20,7 +20,7 @@ var rollbarOpts = {
     environment: 'Media'
 };
 
-const CACHE_EXPIRY = 1; //hours
+const CACHE_EXPIRY = config.cacheExpiry; //hours
 
 app.use(timeout(45000));
 app.use(logOnTimedout);
@@ -97,7 +97,7 @@ app.get('/c/*', function (req, res) {
                     ACL: 'public-read'
                 }, function (err_) {
                     if (err_) {
-                        log.error('There was an error uploading your photo: ' + err_.message);
+                        log.error('There was an error uploading your content: ' + err_.message);
                     }
                     log.info('Successfully uploaded content.');
                 });
